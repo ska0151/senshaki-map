@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>洗車機スタンドマップ</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { width: 100vw; height: 100vh; }
+        /* 検索・操作パネルのスタイル */
+        .panel {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: white; padding: 10px; border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); font-size: 14px;
+        }
+        button { background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+        button:active { background: #0056b3; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <button onclick="panToCurrentLocation()">📍 現在地に移動</button>
+    </div>
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 1. 地図の初期化（東京駅近辺を初期値に）
+        const map = L.map('map').setView([35.6812, 139.7671], 14);
+
+        // OpenStreetMapのタイルレイヤー（無料）
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // 2. サンプル洗車場データ（ここに自分のよく行くスタンドを追加していく）
+        const carWashStations = [
+            {
+                name: "〇〇SS ドライブスルー洗車場",
+                lat: 35.6895,
+                lng: 139.6917,
+                type: "門型ブラシ洗車 / ノンブラシ対応",
+                time: "7:00 ～ 22:00"
+            },
+            {
+                name: "△△ガソリンスタンド 洗車機あり",
+                lat: 35.6700,
+                lng: 139.7500,
+                type: "門型ブラシ洗車",
+                time: "24時間"
+            }
+        ];
+
+        // 3. 洗車場ピンのプロット ＆ Googleマップ連携ボタンの実装
+        carWashStations.forEach(station => {
+            // Googleマップの経路案内用URL（destinationに緯度経度を指定）
+            const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
+
+            const popupContent = `
+                <b>${station.name}</b><br>
+                タイプ: ${station.type}<br>
+                営業時間: ${station.time}<br><br>
+                <a href="${gmapsUrl}" target="_blank" style="display:inline-block; background:#34a853; color:white; padding:6px 12px; text-decoration:none; border-radius:4px; font-weight:bold;">
+                    🚗 Googleマップで案内
+                </a>
+            `;
+
+            L.marker([station.lat, station.lng]).addTo(map)
+                .bindPopup(popupContent);
+        });
+
+        // 4. ユーザーの現在地取得とプロット機能
+        let userMarker = null;
+        let userCircle = null;
+
+        function panToCurrentLocation() {
+            if (!navigator.geolocation) {
+                alert("お使いのブラウザは位置情報に対応していません。");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    // すでにマーカーがあれば移動、なければ新規作成
+                    if (userMarker) {
+                        userMarker.setLatLng([lat, lng]);
+                        userCircle.setLatLng([lat, lng]);
+                        userCircle.setRadius(accuracy);
+                    } else {
+                        userMarker = L.marker([lat, lng], {
+                            title: "現在地"
+                        }).addTo(map).bindPopup("いまここ（あなた）");
+
+                        userCircle = L.circle([lat, lng], {
+                            radius: accuracy,
+                            color: '#1da1f2',
+                            fillColor: '#1da1f2',
+                            fillOpacity: 0.15
+                        }).addTo(map);
+                    }
+
+                    // 地図を現在地にフォーカス
+                    map.setView([lat, lng], 15);
+                },
+                (error) => {
+                    alert("位置情報の取得に失敗しました。ブラウザの設定をご確認ください。");
+                },
+                { enableHighAccuracy: true }
+            );
+        }
+
+        // 起動時にも自動で現在地を取得して表示したい場合は、以下のコメントアウトを外す
+        // panToCurrentLocation();
+    </script>
+</body>
+</html>

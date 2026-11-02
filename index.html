@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>洗車機スタンドマップ</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { width: 100vw; height: 100vh; }
+        /* 操作パネルのスタイル */
+        .panel {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: white; padding: 10px; border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); font-size: 14px;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        button { background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:active { background: #0056b3; }
+        /* ローディング表示 */
+        #loading {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(0, 0, 0, 0.7); color: white;
+            padding: 6px 14px; border-radius: 20px; font-size: 13px; display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">洗車場データを読み込み中...</div>
+
+    <div class="panel">
+        <button onclick="panToCurrentLocation()">📍 現在地に移動</button>
+        <button onclick="loadCarWashStations()" style="background: #28a745;">🔄 データ更新</button>
+    </div>
+    
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 1. 地図の初期化（東京駅近辺を初期中心に設定）
+        const map = L.map('map').setView([35.6812, 139.7671], 13);
+
+        // OpenStreetMapのタイルレイヤー（無料）
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // マーカーを格納するレイヤーグループ（データ更新時にリセットするため）
+        const markersLayer = L.layerGroup().addTo(map);
+
+        // 2. ご提示いただいたGASのウェブアプリURL
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbzScfk5p9wjbSmPBdF9CIFSmCtDvg-1QVariyYfQ9MMnyba0RXaUiJPwyLJ8CQJJivJ/exec';
+
+        // 3. スプレッドシートからデータを取得してマップにプロットする関数
+        function loadCarWashStations() {
+            const loadingEl = document.getElementById('loading');
+            loadingEl.style.display = 'block';
+
+            fetch(GAS_URL)
+                .then(response => response.json())
+                .then(stations => {
+                    // 一度既存のピンをクリア
+                    markersLayer.clearLayers();
+
+                    stations.forEach(station => {
+                        // 緯度・経度が空の行はスキップ
+                        if (!station.lat || !station.lng) return;
+
+                        // Googleマップの経路案内用URL生成
+                        const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
+
+                        const popupContent = `
+                            <div style="min-width: 160px;">
+                                <b>${station.name || '名称未設定'}</b><br>
+                                <span style="color: #555; font-size: 12px;">タイプ: ${station.type || '-'}</span><br>
+                                <span style="color: #555; font-size: 12px;">営業時間: ${station.time || '-'}</span><br><br>
+                                <a href="${gmapsUrl}" target="_blank" style="display:block; text-align:center; background:#34a853; color:white; padding:6px 10px; text-decoration:none; border-radius:4px; font-weight:bold; font-size:13px;">
+                                    🚗 Googleマップで案内
+                                </a>
+                            </div>
+                        `;
+
+                        L.marker([station.lat, station.lng]).addTo(markersLayer)
+                            .bindPopup(popupContent);
+                    });
+
+                    loadingEl.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('データ取得エラー:', error);
+                    loadingEl.style.display = 'none';
+                    alert('洗車場データの取得に失敗しました。');
+                });
+        }
+
+        // 4. ユーザーの現在地取得とプロット機能
+        let userMarker = null;
+        let userCircle = null;
+
+        function panToCurrentLocation() {
+            if (!navigator.geolocation) {
+                alert("お使いのブラウザは位置情報に対応していません。");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    if (userMarker) {
+                        userMarker.setLatLng([lat, lng]);
+                        userCircle.setLatLng([lat, lng]);
+                        userCircle.setRadius(accuracy);
+                    } else {
+                        userMarker = L.marker([lat, lng], {
+                            title: "現在地"
+                        }).addTo(map).bindPopup("いまここ（あなた）");
+
+                        userCircle = L.circle([lat, lng], {
+                            radius: accuracy,
+                            color: '#1da1f2',
+                            fillColor: '#1da1f2',
+                            fillOpacity: 0.15
+                        }).addTo(map);
+                    }
+
+                    map.setView([lat, lng], 15);
+                },
+                (error) => {
+                    alert("位置情報の取得に失敗しました。ブラウザの位置情報権限をご確認ください。");
+                },
+                { enableHighAccuracy: true }
+            );
+        }
+
+        // ページ読み込み時に自動でスプレッドシートのデータを取得して表示
+        window.onload = () => {
+            loadCarWashStations();
+        };
+    </script>
+</body>
+</html>
