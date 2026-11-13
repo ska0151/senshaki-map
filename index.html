@@ -121,8 +121,7 @@
                     } else {
                         userMarker = L.marker([lat, lng], {
                             title: "現在地",
-                            icon: L.icon({
-                                ...L.Icon.Default.prototype.options,
+                            icon: new L.Icon.Default({
                                 className: 'current-location-marker'
                             })
                         }).addTo(map).bindPopup("いまここ（あなた）");
